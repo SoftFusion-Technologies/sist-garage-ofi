@@ -325,7 +325,7 @@ const StockGet = () => {
         await Promise.all([
           axios.get('http://localhost:8080/stock'),
           axios.get('http://localhost:8080/productos'),
-          axios.get('http://localhost:8080/talles'),
+          axios.get('http://localhost:8080/talles/all'),
           axios.get('http://localhost:8080/locales'),
           axios.get('http://localhost:8080/lugares'),
           axios.get('http://localhost:8080/estados')

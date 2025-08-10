@@ -56,7 +56,7 @@ const ProductosGet = () => {
     try {
       const [resProd, resCat] = await Promise.all([
         axios.get('http://localhost:8080/productos'),
-        axios.get('http://localhost:8080/categorias')
+        axios.get('http://localhost:8080/categorias/all')
       ]);
       setProductos(resProd.data);
       setCategorias(resCat.data);

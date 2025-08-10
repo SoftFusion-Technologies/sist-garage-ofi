@@ -25,7 +25,7 @@ const ComboEditarPermitidos = () => {
         await Promise.all([
           axios.get(`http://localhost:8080/combos/${id}`),
           axios.get('http://localhost:8080/productos'),
-          axios.get('http://localhost:8080/categorias'),
+          axios.get('http://localhost:8080/categorias/all'),
           axios.get(`http://localhost:8080/combo-productos-permitidos/${id}`)
         ]);
 

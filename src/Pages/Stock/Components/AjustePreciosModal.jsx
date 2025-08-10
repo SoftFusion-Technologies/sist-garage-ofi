@@ -48,7 +48,7 @@ export default function AjustePreciosModal({ open, onClose, onSuccess }) {
     if (open) {
       setError('');
       setSuccessMessage('');
-      axios.get('http://localhost:8080/categorias').then((res) => {
+      axios.get('http://localhost:8080/categorias/all').then((res) => {
         const options = res.data.map((c) => ({
           value: c.id,
           label: c.nombre
