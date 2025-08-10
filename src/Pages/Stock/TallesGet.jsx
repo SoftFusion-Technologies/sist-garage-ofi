@@ -142,7 +142,7 @@ const TallesGet = () => {
             <motion.div
               key={talle.id}
               layout
-              className="bg-white/10 p-6 rounded-2xl shadow-md backdrop-blur-md border border-white/10 hover:scale-[1.02] transition-all"
+              className="bg-white/10 p-6 rounded-2xl shadow-md backdrop-blur-md border border-white/10 hover:scale-[1.02]"
             >
               <h2 className="text-xl font-bold text-white">ID: {talle.id}</h2>
               <h2 className="text-xl font-bold text-pink-300">
