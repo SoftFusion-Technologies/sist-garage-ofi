@@ -34,6 +34,7 @@ Modal.setAppElement('#root');
 
 // R1- que se puedan imprimir todas las etiquetas del mismo producto BENJAMIN ORELLANA 9/8/25 ✅
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+const normalizeList = (json) => (Array.isArray(json) ? json : json?.data || []);
 
 const CATEGORIAS_TALLES = {
   calzado: [
@@ -339,35 +340,39 @@ const StockGet = () => {
     group.items.some((i) => (i.cantidad ?? 0) > 0);
   // R1- que se puedan imprimir todas las etiquetas del mismo producto BENJAMIN ORELLANA 9/8/25 ✅
 
-  const fetchAll = async () => {
-    try {
-      const [resStock, resProd, resTalles, resLocales, resLugares, resEstados] =
-        await Promise.all([
-          axios.get('http://localhost:8080/stock'),
-          axios.get('http://localhost:8080/productos'),
-          axios.get('http://localhost:8080/talles/all'),
-          axios.get('http://localhost:8080/locales'),
-          axios.get('http://localhost:8080/lugares'),
-          axios.get('http://localhost:8080/estados')
-        ]);
-      setStock(resStock.data);
-      setProductos(resProd.data);
-      setTalles(resTalles.data);
-      setLocales(resLocales.data);
-      setLugares(resLugares.data);
-      setEstados(resEstados.data);
-    } catch (err) {
-      setModalFeedbackMsg(
-        'Ocurrió un error al cargar los datos.\n' +
-          (process.env.NODE_ENV !== 'production'
-            ? err.message || err.toString()
-            : '')
-      );
-      setModalFeedbackType('error');
-      setModalFeedbackOpen(true);
-    }
-  };
+const fetchAll = async () => {
+  try {
+    const [resStock, resProd, resTalles, resLocales, resLugares, resEstados] =
+      await Promise.all([
+        axios.get('http://localhost:8080/stock', {
+          params: { page: 1, limit: 200 }
+        }), // opcional
+        axios.get('http://localhost:8080/productos', {
+          params: { page: 1, limit: 1000, estado: 'activo' }
+        }),
+        axios.get('http://localhost:8080/talles/all'),
+        axios.get('http://localhost:8080/locales'),
+        axios.get('http://localhost:8080/lugares'),
+        axios.get('http://localhost:8080/estados')
+      ]);
 
+    setStock(normalizeList(resStock.data));
+    setProductos(normalizeList(resProd.data)); // 👈 siempre array
+    setTalles(normalizeList(resTalles.data));
+    setLocales(normalizeList(resLocales.data));
+    setLugares(normalizeList(resLugares.data));
+    setEstados(normalizeList(resEstados.data));
+  } catch (err) {
+    setModalFeedbackMsg(
+      'Ocurrió un error al cargar los datos.\n' +
+        (process.env.NODE_ENV !== 'production'
+          ? err.message || err.toString()
+          : '')
+    );
+    setModalFeedbackType('error');
+    setModalFeedbackOpen(true);
+  }
+};
   useEffect(() => {
     fetchAll();
   }, []);
