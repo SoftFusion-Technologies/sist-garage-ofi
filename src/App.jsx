@@ -65,6 +65,7 @@ import DashboardEstadisticasVendedores from './Pages/Vendedores/DashboardEstadis
 import CombosGet from './Pages/Stock/Combos/CombosGet';
 import ComboEditarPermitidos from './Pages/Stock/Combos/ComboEditarPermitidos';
 import ClientGateFixed from './Components/Security/ClientGateFixed';
+import SoftFusionIntro from './Pages/Innovation/SoftFusionIntro';
 
 function AppContent() {
   const { hideLayoutFooter, hideLayoutNav } = useLayoutVisibility();
@@ -75,6 +76,15 @@ function AppContent() {
         {/* {!hideLayoutNav && <NavBar />} */}
         <Rutas>
           {/* <Ruta path="/" element={<Home />} /> */}
+          <Ruta
+            path="/register-client"
+            element={
+              <SoftFusionIntro
+                // logoSrc={imgLogo}
+                onReady={(nombre) => console.log('Nombre guardado:', nombre)}
+              />
+            }
+          />{' '}
           {/* componentes del staff y login INICIO */}
           <Ruta path="/login" element={<LoginForm />} />
           <Ruta
