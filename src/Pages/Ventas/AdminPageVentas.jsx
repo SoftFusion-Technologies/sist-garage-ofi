@@ -19,7 +19,8 @@ import {
   FaCog,
   FaCashRegister,
   FaTruckMoving,
-  FaRegSmileBeam
+  FaRegSmileBeam,
+  FaMoneyBillWave
 } from 'react-icons/fa';
 import { LiaCashRegisterSolid } from 'react-icons/lia';
 
@@ -54,6 +55,12 @@ const ventasLinks = [
     label: 'Resumenes de Caja',
     icon: <FaRegSmileBeam />,
     desc: 'Movimientos de caja'
+  },
+  {
+    to: '/dashboard/ventas/recaudaciones',
+    label: 'Recaudaciones',
+    icon: <FaMoneyBillWave />,
+    desc: 'Retiros / recaudaciones de caja'
   },
   {
     to: '/dashboard/ventas/historial',

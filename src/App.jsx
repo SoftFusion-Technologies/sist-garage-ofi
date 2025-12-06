@@ -67,7 +67,7 @@ import ComboEditarPermitidos from './Pages/Stock/Combos/ComboEditarPermitidos';
 import ClientGateFixed from './Components/Security/ClientGateFixed';
 import SoftFusionIntro from './Pages/Innovation/SoftFusionIntro';
 import AdminPageCaja from './Pages/Ventas/AdminPageCaja';
-
+import RecaudacionesCaja from './Pages/Ventas/RecaudacionesCaja';
 function AppContent() {
   const { hideLayoutFooter, hideLayoutNav } = useLayoutVisibility();
 
@@ -240,6 +240,14 @@ function AppContent() {
               <ProtectedRoute>
                 {' '}
                 <CajaPOS />{' '}
+              </ProtectedRoute>
+            }
+          />
+          <Ruta
+            path="/dashboard/ventas/recaudaciones"
+            element={
+              <ProtectedRoute>
+                <RecaudacionesCaja />
               </ProtectedRoute>
             }
           />

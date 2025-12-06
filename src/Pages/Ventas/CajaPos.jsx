@@ -48,6 +48,20 @@ import {
 } from '../../utils/utils.js';
 // Microcomponente Glass Card
 
+import { useNavigate } from 'react-router-dom';
+import Swal from 'sweetalert2';
+import withReactContent from 'sweetalert2-react-content';
+
+const MySwal = withReactContent(Swal);
+
+const Toast = Swal.mixin({
+  toast: true,
+  position: 'top-end',
+  showConfirmButton: false,
+  timer: 2200,
+  timerProgressBar: true
+});
+
 const BASE_URL = 'http://localhost:8080';
 const GlassCard = ({ children, className = '' }) => (
   <div
@@ -76,6 +90,7 @@ const copiar = (txt) => navigator.clipboard.writeText(String(txt ?? ''));
 
 export default function CajaPOS() {
   const { userId, userLocalId } = useAuth();
+  const navigate = useNavigate();
 
   const [cajaActual, setCajaActual] = useState(null);
   const [movimientos, setMovimientos] = useState([]);
@@ -103,6 +118,15 @@ export default function CajaPOS() {
   const [fHasta, setFHasta] = useState('');
   const [fTipo, setFTipo] = useState(''); // '', 'ingreso', 'egreso', 'venta'
   const [fQuery, setFQuery] = useState('');
+
+  // R4 - Nuevo modulo de recaudaciones Benjamin Orellana - 05-12-2025 INI
+  const [showRecaudar, setShowRecaudar] = useState(false); // modal recaudación
+  const [recaudacionForm, setRecaudacionForm] = useState({
+    monto: '',
+    observaciones: ''
+  });
+  const [loadingRecaudar, setLoadingRecaudar] = useState(false);
+  // R4 - Nuevo modulo de recaudaciones Benjamin Orellana - 05-12-2025 FIN
 
   async function verMovimientosDeCaja(cajaId) {
     if (!cajaId) return;
@@ -181,81 +205,270 @@ export default function CajaPOS() {
       isNaN(parseFloat(saldoInicial)) ||
       parseFloat(saldoInicial) < 0
     ) {
-      alert('Ingresá un saldo inicial válido');
+      await Toast.fire({
+        icon: 'warning',
+        title: 'Ingresá un saldo inicial válido'
+      });
       return;
     }
+
     try {
       const res = await axios.post(`http://localhost:8080/caja`, {
         usuario_id: userId,
         local_id: userLocalId,
         saldo_inicial: parseFloat(saldoInicial)
       });
-      setCajaActual(res.data.caja || res.data);
+
+      const cajaCreada = res.data.caja || res.data;
+
+      setCajaActual(cajaCreada);
       setMovimientos([]);
       setSaldoInicial('');
+
+      await MySwal.fire({
+        icon: 'success',
+        title: 'Caja abierta',
+        text: `Saldo inicial: ${formatearPeso(cajaCreada.saldo_inicial)}`,
+        confirmButtonColor: '#10b981'
+      });
     } catch (err) {
-      alert(err.response?.data?.mensajeError || 'Error al abrir caja');
+      await MySwal.fire({
+        icon: 'error',
+        title: 'Error al abrir la caja',
+        text:
+          err.response?.data?.mensajeError ||
+          'Ocurrió un error al intentar abrir la caja.'
+      });
     }
   };
 
   const cerrarCaja = async () => {
     if (!cajaActual) return;
-    if (!window.confirm('¿Cerrar caja?')) return;
+
     const totalIngresos = movimientos
       .filter((m) => m.tipo === 'ingreso')
       .reduce((sum, m) => sum + Number(m.monto), 0);
+
     const totalEgresos = movimientos
       .filter((m) => m.tipo === 'egreso')
       .reduce((sum, m) => sum + Number(m.monto), 0);
+
     const saldoFinal =
       Number(cajaActual.saldo_inicial) + totalIngresos - totalEgresos;
+
+    const result = await MySwal.fire({
+      title: '¿Cerrar caja?',
+      html: `
+      <div style="text-align:left;font-size:13px">
+        <p><b>Saldo inicial:</b> ${formatearPeso(cajaActual.saldo_inicial)}</p>
+        <p><b>Ingresos:</b> ${formatearPeso(totalIngresos)}</p>
+        <p><b>Egresos:</b> ${formatearPeso(totalEgresos)}</p>
+        <p><b>Saldo final estimado:</b> ${formatearPeso(saldoFinal)}</p>
+      </div>
+    `,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, cerrar caja',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#10b981',
+      cancelButtonColor: '#6b7280',
+      reverseButtons: true
+    });
+
+    if (!result.isConfirmed) return;
+
     try {
       await axios.put(`http://localhost:8080/caja/${cajaActual.id}`, {
         fecha_cierre: new Date(),
         saldo_final: saldoFinal
       });
+
       setCajaActual(null);
       setMovimientos([]);
+
+      await MySwal.fire({
+        icon: 'success',
+        title: 'Caja cerrada',
+        text: `Se registró un saldo final de ${formatearPeso(saldoFinal)}.`,
+        confirmButtonColor: '#10b981'
+      });
     } catch (err) {
-      alert(err.response?.data?.mensajeError || 'Error al cerrar caja');
+      await MySwal.fire({
+        icon: 'error',
+        title: 'Error al cerrar caja',
+        text:
+          err.response?.data?.mensajeError ||
+          'Ocurrió un error al intentar cerrar la caja.'
+      });
     }
   };
 
   const registrarMovimiento = async () => {
-    if (!cajaActual) return;
+    if (!cajaActual) {
+      await MySwal.fire({
+        icon: 'error',
+        title: 'Sin caja abierta',
+        text: 'Abrí una caja antes de registrar movimientos.'
+      });
+      return;
+    }
+
     if (
       !nuevoMovimiento.descripcion ||
       !nuevoMovimiento.monto ||
       isNaN(Number(nuevoMovimiento.monto))
     ) {
-      alert('Completá todos los datos');
+      await Toast.fire({
+        icon: 'warning',
+        title: 'Completá todos los datos del movimiento'
+      });
       return;
     }
+
+    const tipoMovimiento =
+      nuevoMovimiento.tipo === 'ingreso' ? 'Ingreso' : 'Egreso';
+
     try {
       await axios.post(`http://localhost:8080/movimientos_caja`, {
         caja_id: cajaActual.id,
         tipo: nuevoMovimiento.tipo,
         descripcion: nuevoMovimiento.descripcion,
         monto: Number(nuevoMovimiento.monto),
-        usuario_id: userId // 👈 necesario para el log
+        usuario_id: userId
       });
+
       const mov = await axios.get(
         `http://localhost:8080/movimientos/caja/${cajaActual.id}`
       );
 
       setMovimientos(mov.data);
       setNuevoMovimiento({ tipo: 'ingreso', monto: '', descripcion: '' });
+
+      await Toast.fire({
+        icon: 'success',
+        title: `${tipoMovimiento} registrado correctamente`
+      });
     } catch (err) {
-      alert('Error al registrar movimiento');
+      await MySwal.fire({
+        icon: 'error',
+        title: 'Error al registrar movimiento',
+        text:
+          err.response?.data?.mensajeError ||
+          'Ocurrió un error al guardar el movimiento.'
+      });
     }
   };
 
   const totalIngresos = movimientos
     .filter((m) => m.tipo === 'ingreso')
     .reduce((sum, m) => sum + Number(m.monto), 0);
+
   const totalEgresos = movimientos
     .filter((m) => m.tipo === 'egreso')
     .reduce((sum, m) => sum + Number(m.monto), 0);
+
+  // saldo actual calculado a partir de movimientos
+  const saldoActual = useMemo(
+    () =>
+      (cajaActual ? Number(cajaActual.saldo_inicial) : 0) +
+      totalIngresos -
+      totalEgresos,
+    [cajaActual, totalIngresos, totalEgresos]
+  );
+
+  // total retirado / recaudado en esta caja (egresos con origen = retiro_recaudacion)
+  const totalRecaudado = useMemo(
+    () =>
+      movimientos
+        .filter((m) => m.tipo === 'egreso' && m.origen === 'retiro_recaudacion')
+        .reduce((sum, m) => sum + Number(m.monto), 0),
+    [movimientos]
+  );
+
+  const registrarRecaudacion = async () => {
+    if (!cajaActual) {
+      await MySwal.fire({
+        icon: 'error',
+        title: 'No hay caja abierta',
+        text: 'Abrí una caja antes de registrar una recaudación.'
+      });
+      return;
+    }
+
+    const monto = Number(recaudacionForm.monto);
+
+    if (!monto || isNaN(monto) || monto <= 0) {
+      await Toast.fire({
+        icon: 'warning',
+        title: 'Ingresá un monto válido para la recaudación'
+      });
+      return;
+    }
+
+    if (monto > saldoActual) {
+      await MySwal.fire({
+        icon: 'warning',
+        title: 'Monto excede el saldo actual',
+        text: `Saldo actual en caja: ${formatearPeso(saldoActual)}`
+      });
+      return;
+    }
+
+    const result = await MySwal.fire({
+      title: 'Confirmar recaudación',
+      html: `
+      <div style="text-align:left;font-size:13px">
+        <p><b>Monto a recaudar:</b> ${formatearPeso(monto)}</p>
+        <p><b>Saldo actual:</b> ${formatearPeso(saldoActual)}</p>
+      </div>
+    `,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Confirmar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#f59e0b',
+      cancelButtonColor: '#6b7280',
+      reverseButtons: true
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+      setLoadingRecaudar(true);
+
+      await axios.post(`${BASE_URL}/caja/recaudaciones`, {
+        local_id: userLocalId,
+        usuario_id: userId,
+        monto,
+        observaciones: recaudacionForm.observaciones || ''
+      });
+
+      const mov = await axios.get(
+        `${BASE_URL}/movimientos/caja/${cajaActual.id}`
+      );
+      setMovimientos(mov.data);
+
+      setRecaudacionForm({ monto: '', observaciones: '' });
+      setShowRecaudar(false);
+
+      await MySwal.fire({
+        icon: 'success',
+        title: 'Recaudación registrada',
+        text: `Se registró una recaudación por ${formatearPeso(monto)}.`,
+        confirmButtonColor: '#f59e0b'
+      });
+    } catch (err) {
+      await MySwal.fire({
+        icon: 'error',
+        title: 'Error al registrar la recaudación',
+        text:
+          err.response?.data?.mensajeError ||
+          'Ocurrió un error al guardar la recaudación.'
+      });
+    } finally {
+      setLoadingRecaudar(false);
+    }
+  };
 
   // Estado para modal de detalle
   const [detalleVenta, setDetalleVenta] = useState(null);
@@ -270,7 +483,11 @@ export default function CajaPOS() {
       const data = await res.json();
       setDetalleVenta(data);
     } catch (err) {
-      alert('No se pudo obtener el detalle de la venta');
+      await MySwal.fire({
+        icon: 'error',
+        title: 'Error al obtener el detalle',
+        text: 'No se pudo obtener el detalle de la venta.'
+      });
     }
   };
 
@@ -310,6 +527,10 @@ export default function CajaPOS() {
     if (tipoMov === 'ingreso') arr = arr.filter((m) => m.tipo === 'ingreso');
     if (tipoMov === 'egreso') arr = arr.filter((m) => m.tipo === 'egreso');
     if (tipoMov === 'venta') arr = arr.filter((m) => esVenta(m));
+    if (tipoMov === 'recaudacion') {
+      arr = arr.filter((m) => m.origen === 'retiro_recaudacion');
+    }
+
     if (queryMovs.trim()) {
       const q = queryMovs.trim().toLowerCase();
       arr = arr.filter(
@@ -321,8 +542,9 @@ export default function CajaPOS() {
     return arr;
   }, [movimientosOrdenados, tipoMov, queryMovs]);
   // RESPONSIVE & GLASS
+
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-[#101016] via-[#181A23] to-[#11192b] px-2 py-8">
+    <div className="min-h-screen  w-full flex items-center justify-center bg-gradient-to-br from-[#101016] via-[#181A23] to-[#11192b] px-2 py-8">
       <ParticlesBackground />
       <ButtonBack></ButtonBack>
       {/* <ButtonBack /> */}
@@ -354,36 +576,62 @@ export default function CajaPOS() {
                   {new Date(cajaActual.fecha_apertura).toLocaleString()}
                 </span>
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-4">
                 <div className="bg-black/30 rounded-lg px-4 py-2 flex flex-col items-center">
                   <span className="text-xs text-gray-300">Saldo inicial</span>
                   <span className="font-bold text-emerald-300 text-lg">
                     {formatearPeso(cajaActual.saldo_inicial)}
                   </span>
                 </div>
+
                 <div className="bg-black/30 rounded-lg px-4 py-2 flex flex-col items-center">
                   <span className="text-xs text-gray-300">Ingresos</span>
-
                   <span className="font-bold text-green-400 text-lg">
                     +{formatearPeso(totalIngresos)}
                   </span>
                 </div>
+
                 <div className="bg-black/30 rounded-lg px-4 py-2 flex flex-col items-center">
                   <span className="text-xs text-gray-300">Egresos</span>
                   <span className="font-bold text-red-400 text-lg">
                     -{formatearPeso(totalEgresos)}
                   </span>
                 </div>
+
+                {/* R4 - 05-12-2025 NUEVO: total retirado / recaudado */}
+                <div className="bg-black/30 rounded-lg px-4 py-2 flex flex-col items-center">
+                  <span className="text-xs text-gray-300">
+                    Retirado / Recaudado
+                  </span>
+                  <span className="font-bold text-amber-300 text-lg">
+                    -{formatearPeso(totalRecaudado)}
+                  </span>
+                </div>
+
                 <div className="bg-black/40 rounded-lg px-4 py-2 flex flex-col items-center border border-emerald-700 shadow-inner">
                   <span className="text-xs text-gray-300">Saldo actual</span>
                   <span className="font-bold text-emerald-400 text-xl">
-                    {formatearPeso(
-                      Number(cajaActual.saldo_inicial) +
-                        totalIngresos -
-                        totalEgresos
-                    )}
+                    {formatearPeso(saldoActual)}
                   </span>
                 </div>
+              </div>
+
+              <div className="flex justify-between items-center mb-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => navigate('/dashboard/ventas/recaudaciones')}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-xs text-gray-200 border border-white/10"
+                >
+                  Ver recaudaciones
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowRecaudar(true)}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-sm font-semibold text-white shadow-lg"
+                >
+                  <FaMoneyBillWave /> Registrar recaudación
+                </button>
               </div>
 
               <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-[#1a1f25] to-[#222832] p-3 shadow-xl">
@@ -401,7 +649,8 @@ export default function CajaPOS() {
                         { key: 'todos', label: 'Todos' },
                         { key: 'ingreso', label: 'Ingresos' },
                         { key: 'egreso', label: 'Egresos' },
-                        { key: 'venta', label: 'Ventas' }
+                        { key: 'venta', label: 'Ventas' },
+                        { key: 'recaudacion', label: 'Recaudaciones' } // R4 - 05-12-2025 NUEVO
                       ].map(({ key, label }) => (
                         <button
                           key={key}
@@ -452,13 +701,19 @@ export default function CajaPOS() {
                       const venta = esVenta(m);
                       const egreso = m.tipo === 'egreso';
                       const ingreso = m.tipo === 'ingreso';
+                      const recaudacion = m.origen === 'retiro_recaudacion'; // R4- 05-12-2025 NUEVO
+
                       const Icono = venta
                         ? FaCashRegister
+                        : recaudacion
+                        ? FaMoneyBillWave
                         : ingreso
                         ? FaPlus
                         : FaMinus;
 
-                      const rowTheme = venta
+                      const rowTheme = recaudacion
+                        ? 'from-amber-950/60 to-amber-900/40 hover:from-amber-900/60 hover:to-amber-800/50'
+                        : venta
                         ? 'from-emerald-950/60 to-emerald-900/40 hover:from-emerald-900/60 hover:to-emerald-800/50'
                         : egreso
                         ? 'from-red-950/60 to-red-900/40 hover:from-red-900/60 hover:to-red-800/50'
@@ -468,6 +723,14 @@ export default function CajaPOS() {
                         ? 'text-emerald-300'
                         : 'text-red-300';
                       const sign = ingreso ? '+' : '-';
+
+                      const badgeClass = recaudacion
+                        ? 'bg-amber-400/10 text-amber-300 border-amber-400/30'
+                        : ingreso
+                        ? 'bg-emerald-400/10 text-emerald-300 border-emerald-400/30'
+                        : egreso
+                        ? 'bg-red-400/10 text-red-300 border-red-400/30'
+                        : 'bg-emerald-400/10 text-emerald-300 border-emerald-400/30';
 
                       return (
                         <motion.div
@@ -506,21 +769,17 @@ export default function CajaPOS() {
                                 {/* Meta: badge + fecha + acción */}
                                 <div className="mt-1 flex items-center gap-2 flex-wrap">
                                   <span
-                                    className={`text-[10px] px-2 py-0.5 rounded-full border
-                      ${
-                        ingreso
-                          ? 'bg-emerald-400/10 text-emerald-300 border-emerald-400/30'
-                          : egreso
-                          ? 'bg-red-400/10 text-red-300 border-red-400/30'
-                          : 'bg-emerald-400/10 text-emerald-300 border-emerald-400/30'
-                      }`}
+                                    className={`text-[10px] px-2 py-0.5 rounded-full border ${badgeClass}`}
                                   >
                                     {venta
                                       ? 'Venta'
+                                      : recaudacion
+                                      ? 'Recaudación'
                                       : ingreso
                                       ? 'Ingreso'
                                       : 'Egreso'}
                                   </span>
+
                                   <span className="text-[11px] text-gray-300 font-mono tabular-nums">
                                     {fechaCorta(m.fecha)} · {horaCorta(m.fecha)}
                                   </span>
@@ -576,17 +835,12 @@ export default function CajaPOS() {
                                 {m.descripcion}
                               </span>
                               <span
-                                className={`text-[10px] px-2 py-0.5 rounded-full border
-                  ${
-                    ingreso
-                      ? 'bg-emerald-400/10 text-emerald-300 border-emerald-400/30'
-                      : egreso
-                      ? 'bg-red-400/10 text-red-300 border-red-400/30'
-                      : 'bg-emerald-400/10 text-emerald-300 border-emerald-400/30'
-                  }`}
+                                className={`text-[10px] px-2 py-0.5 rounded-full border ${badgeClass}`}
                               >
                                 {venta
                                   ? 'Venta'
+                                  : recaudacion
+                                  ? 'Recaudación'
                                   : ingreso
                                   ? 'Ingreso'
                                   : 'Egreso'}
@@ -1537,6 +1791,103 @@ export default function CajaPOS() {
                   ))
                 )}
               </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {showRecaudar && (
+          <motion.div
+            className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => !loadingRecaudar && setShowRecaudar(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 30, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={{ scale: 0.96, y: 20, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="bg-[#181d2b] rounded-2xl w-full max-w-md p-6 border border-emerald-600 text-white relative"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                className="absolute top-3 right-4 text-gray-400 hover:text-emerald-300"
+                onClick={() => setShowRecaudar(false)}
+                disabled={loadingRecaudar}
+              >
+                <FaTimes />
+              </button>
+
+              <div className="flex items-center gap-3 mb-4">
+                <FaMoneyBillWave className="text-emerald-400 text-2xl" />
+                <div>
+                  <h2 className="text-xl font-bold">
+                    Registrar recaudación / retiro
+                  </h2>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Saldo actual en caja:{' '}
+                    <span className="font-semibold text-emerald-300">
+                      {formatearPeso(saldoActual)}
+                    </span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="text-sm text-gray-300 block mb-1">
+                    Monto a recaudar
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={recaudacionForm.monto}
+                    onChange={(e) =>
+                      setRecaudacionForm((prev) => ({
+                        ...prev,
+                        monto: e.target.value
+                      }))
+                    }
+                    className="w-full rounded-lg bg-[#23253a] border border-emerald-500/60 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="Ej: 50000"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-gray-300 block mb-1">
+                    Observaciones (opcional)
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={recaudacionForm.observaciones}
+                    onChange={(e) =>
+                      setRecaudacionForm((prev) => ({
+                        ...prev,
+                        observaciones: e.target.value
+                      }))
+                    }
+                    className="w-full rounded-lg bg-[#23253a] border border-emerald-500/60 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+                    placeholder="Ej: Recaudación semanal, traslado a caja fuerte..."
+                  />
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={registrarRecaudacion}
+                disabled={loadingRecaudar}
+                className="mt-5 w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 font-semibold text-white shadow-lg disabled:opacity-60"
+              >
+                {loadingRecaudar ? (
+                  <span>Guardando...</span>
+                ) : (
+                  <>
+                    <CheckCircle2 size={18} /> Confirmar recaudación
+                  </>
+                )}
+              </button>
             </motion.div>
           </motion.div>
         )}

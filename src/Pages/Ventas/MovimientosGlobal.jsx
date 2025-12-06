@@ -40,6 +40,17 @@ export default function MovimientosGlobal() {
       .finally(() => setLoading(false));
   }, [userLevel, userLocalId]);
 
+  const [soloRecaudaciones, setSoloRecaudaciones] = useState(false);
+
+  const getOrigenLabel = (mov) => {
+    if (mov.origen === 'retiro_recaudacion') return 'Recaudación';
+    if (mov.origen === 'venta') return 'Venta';
+    if (mov.origen === 'gasto') return 'Gasto';
+    if (mov.origen === 'ajuste') return 'Ajuste';
+    if (mov.origen === 'otro') return 'Otro';
+    return '-';
+  };
+
   // NUEVOS STATES
   const [paginaActual, setPaginaActual] = useState(1);
   const itemsPorPagina = 20;
@@ -48,6 +59,7 @@ export default function MovimientosGlobal() {
     (mov) =>
       (tipoFiltro === 'todos' || mov.tipo === tipoFiltro) &&
       (localFiltro === 'todos' || mov.local_id == localFiltro) &&
+      (!soloRecaudaciones || mov.origen === 'retiro_recaudacion') && // ✅ NUEVO
       (mov.descripcion.toLowerCase().includes(busqueda.toLowerCase()) ||
         (mov.referencia && mov.referencia.toString().includes(busqueda)) ||
         (mov.caja_id && mov.caja_id.toString().includes(busqueda)))
@@ -69,17 +81,19 @@ export default function MovimientosGlobal() {
 
   // Exportar a CSV
   const exportarCSV = () => {
-    const header = 'Caja,Fecha,Tipo,Descripción,Monto,Referencia\n';
+    const header = 'Caja,Fecha,Tipo,Origen,Descripción,Monto,Referencia\n';
     const rows = movimientosFiltrados.map((m) =>
       [
         m.caja_id,
         format(new Date(m.fecha), 'dd/MM/yyyy HH:mm'),
         m.tipo,
+        getOrigenLabel(m),
         `"${m.descripcion.replace(/"/g, '""')}"`,
         m.monto,
         m.referencia || ''
       ].join(',')
     );
+
     const blob = new Blob([header + rows.join('\n')], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -106,7 +120,7 @@ export default function MovimientosGlobal() {
       <ParticlesBackground />
       <ButtonBack></ButtonBack>
 
-      <div className="p-5 bg-[#212432] rounded-2xl shadow-lg w-full max-w-4xl mx-auto">
+      <div className="p-1 bg-[#212432] rounded-2xl shadow-lg w-full max-w-4xl mx-auto">
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3 mb-6">
           <div>
             <h2 className="text-2xl font-bold text-emerald-400 flex items-center gap-2">
@@ -169,6 +183,15 @@ export default function MovimientosGlobal() {
               ))}
             </select>
           )}
+          <label className="flex items-center gap-2 text-xs text-gray-300 mt-1 md:mt-0">
+            <input
+              type="checkbox"
+              className="accent-emerald-500"
+              checked={soloRecaudaciones}
+              onChange={(e) => setSoloRecaudaciones(e.target.checked)}
+            />
+            Solo recaudaciones
+          </label>
         </div>
 
         {loading ? (
@@ -189,6 +212,7 @@ export default function MovimientosGlobal() {
                   <th className="px-4 py-2">Tipo</th>
                   <th className="px-4 py-2">Descripción</th>
                   <th className="px-4 py-2 text-right">Monto</th>
+                  <th className="px-4 py-2">Origen</th> {/* ✅ NUEVO */}
                   <th className="px-4 py-2">Referencia</th>
                 </tr>
               </thead>
@@ -232,6 +256,9 @@ export default function MovimientosGlobal() {
                         style: 'currency',
                         currency: 'ARS'
                       })}
+                    </td>
+                    <td className="px-4 py-2 text-xs text-gray-300">
+                      {getOrigenLabel(mov)}
                     </td>
                     <td className="px-4 py-2 text-xs text-gray-300">
                       {mov.referencia || '-'}
