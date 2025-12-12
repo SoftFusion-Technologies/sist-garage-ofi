@@ -1,4 +1,4 @@
-import { FaCreditCard, FaCog, FaTicketAlt } from 'react-icons/fa';
+import { FaCreditCard, FaCog, FaTicketAlt, FaLayerGroup } from 'react-icons/fa';
 import ParticlesBackground from '../../../Components/ParticlesBackground';
 import ButtonBack from '../../../Components/ButtonBack';
 import { useEffect, useState } from 'react';
@@ -6,6 +6,7 @@ import TicketConfigCard from './TicketConfigCard';
 
 export default function ConfiguracionPanel({
   abrirModalMediosPago,
+  abrirModalCombinarMediosPago,
   loadingMediosPago
 }) {
   const [openTicketConfig, setOpenTicketConfig] = useState(false);
@@ -84,12 +85,34 @@ export default function ConfiguracionPanel({
             className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-500 to-cyan-500 text-white font-extrabold text-xl shadow-lg hover:from-violet-600 hover:to-cyan-600 active:scale-95 transition-all flex items-center justify-center gap-3 drop-shadow-lg focus:outline-none focus:ring-2 focus:ring-violet-400"
             onClick={() => {
               if (isDesktop) setOpenTicketConfig(true);
-              else
-                setOpenTicketConfig(true)
+              else setOpenTicketConfig(true);
             }}
           >
             <FaTicketAlt className="text-2xl" />
             Configurar Ticket
+          </button>
+        </div>
+        {/* Card: Combinar Medios de Pago (NUEVA) */}
+        <div className="relative group bg-white/80 dark:bg-zinc-900/90 rounded-3xl border border-zinc-200 dark:border-zinc-800 shadow-xl p-8 flex flex-col items-center text-center backdrop-blur-sm transition-transform hover:scale-[1.025] hover:shadow-2xl">
+          <div className="absolute -top-10 -right-16 w-40 h-40 bg-gradient-to-br from-cyan-400/10 to-transparent rounded-full blur-2xl opacity-40 pointer-events-none" />
+          <div className="absolute -bottom-8 -left-6 w-24 h-24 bg-gradient-to-tl from-emerald-200/20 to-transparent rounded-full blur-2xl opacity-50 pointer-events-none transition" />
+
+          <FaLayerGroup className="text-cyan-500 text-5xl mb-6 drop-shadow-xl" />
+          <h2 className="text-2xl font-bold mb-3 text-zinc-800 dark:text-zinc-50 tracking-tight">
+            Combinar Medios de Pago
+          </h2>
+          <p className="text-zinc-500 dark:text-zinc-300 mb-8 text-base leading-relaxed font-medium">
+            Creá medios compuestos como “Efectivo + Transferencia” o “Efectivo +
+            Cuenta”.
+          </p>
+
+          <button
+            className="w-full py-4 rounded-2xl bg-gradient-to-r from-cyan-500 to-emerald-500 text-white font-extrabold text-xl shadow-lg hover:from-cyan-600 hover:to-emerald-600 active:scale-95 transition-all flex items-center justify-center gap-3 drop-shadow-lg focus:outline-none focus:ring-2 focus:ring-cyan-400"
+            onClick={abrirModalCombinarMediosPago}
+            disabled={loadingMediosPago}
+          >
+            <FaLayerGroup className="text-2xl" />
+            Combinar Medios
           </button>
         </div>
         {/* Card: Placeholder Futuras Configuraciones */}

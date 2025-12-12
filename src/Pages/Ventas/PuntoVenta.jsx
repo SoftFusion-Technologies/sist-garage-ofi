@@ -25,6 +25,8 @@ import axios from 'axios';
 import { useAuth } from '../../AuthContext'; // Ajustá el path si es necesario
 import TicketVentaModal from './Config/TicketVentaModal';
 import TotalConOpciones from './Components/TotalConOpciones';
+import ModalPagoCompuesto from './Components/ModalPagoCompuesto';
+
 // Agrupa productos por producto_id y junta sus talles en un array
 function agruparProductosConTalles(stockItems) {
   const map = new Map();
@@ -133,6 +135,34 @@ export default function PuntoVenta() {
   const idleTimerRef = useRef(null);
 
   const API_URL = 'http://localhost:8080';
+
+  const [openPagoCompuesto, setOpenPagoCompuesto] = useState(false);
+  const [compComponentes, setCompComponentes] = useState([]);
+  const [compNombre, setCompNombre] = useState('');
+  const [ventaRequestPendiente, setVentaRequestPendiente] = useState(null);
+
+  const cargarComponentesCompuesto = async (compuestoId) => {
+    const res = await axios.get(
+      `${API_URL}/medios-pago/${compuestoId}/componentes`
+    );
+    const rows = Array.isArray(res.data) ? res.data : [];
+
+    // Armamos componentes “limpios” para el modal
+    const comps = rows
+      .sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0))
+      .map((r) => {
+        const m = r.medio || {};
+        return {
+          id: m.id ?? r.medio_pago_id,
+          nombre: m.nombre ?? 'Componente',
+          descripcion: m.descripcion ?? '',
+          orden: r.orden ?? 0
+        };
+      })
+      .filter((x) => x.id);
+
+    return comps;
+  };
 
   const resetSession = () => {
     deltasRef.current = [];
@@ -634,10 +664,17 @@ export default function PuntoVenta() {
       alert('Seleccioná un medio de pago.');
       return;
     }
-    if (!window.confirm('¿Deseás registrar la venta?')) return;
 
+    // Buscar el medio seleccionado para saber si es SIMPLE o COMPUESTO
+    const medioSel = mediosPago.find((m) => Number(m.id) === Number(medioPago));
+    const esCompuesto =
+      String(medioSel?.tipo || 'SIMPLE').toUpperCase() === 'COMPUESTO';
+
+    // =========================================================
+    // ARMAR ventaRequest (TU CÓDIGO TAL CUAL)
+    // =========================================================
     const productosRequest = carrito.map((item) => {
-      const precioOriginal = item.producto?.precio || item.precio; // fallback si no tenés producto.precio
+      const precioOriginal = item.producto?.precio || item.precio;
       const precioFinal = item.precio_con_descuento ?? item.precio;
       const descuento = precioOriginal - precioFinal;
       const descuentoPorcentaje =
@@ -655,10 +692,8 @@ export default function PuntoVenta() {
       };
     });
 
-    // 🔢 Calcular orígenes de descuento
     const origenes_descuento = [];
 
-    // 1. Descuentos por producto
     carrito.forEach((item) => {
       if (item.descuentoPorcentaje && item.descuentoPorcentaje > 0) {
         origenes_descuento.push({
@@ -674,15 +709,13 @@ export default function PuntoVenta() {
       }
     });
 
-    // Bandera si hay descuento manual
     const hayDescuentoManual =
       aplicarDescuento &&
       descuentoPersonalizado !== '' &&
       parseFloat(descuentoPersonalizado) > 0;
 
-    // 2. Descuento por medio de pago (solo si NO hay manual)
     if (
-      aplicarDescuento && // esta es la condición clave
+      aplicarDescuento &&
       !hayDescuentoManual &&
       totalCalculado.ajuste_porcentual !== 0
     ) {
@@ -690,14 +723,14 @@ export default function PuntoVenta() {
         tipo: 'medio_pago',
         referencia_id: medioPago,
         detalle:
-          mediosPago.find((m) => m.id === medioPago)?.nombre || 'Medio de pago',
+          mediosPago.find((m) => Number(m.id) === Number(medioPago))?.nombre ||
+          'Medio de pago',
         porcentaje: totalCalculado.ajuste_porcentual,
         monto:
           (totalCalculado.precio_base * totalCalculado.ajuste_porcentual) / 100
       });
     }
 
-    // 3. Descuento manual (tiene prioridad)
     if (hayDescuentoManual) {
       origenes_descuento.push({
         tipo: 'manual',
@@ -718,7 +751,7 @@ export default function PuntoVenta() {
       cliente_id: clienteSeleccionado ? clienteSeleccionado.id : null,
       productos: productosRequest,
       combos: combosSeleccionados,
-      total: totalFinalCalculado, // Total sin descuentos ni recargos
+      total: totalFinalCalculado,
       medio_pago_id: medioPago,
       usuario_id: userId,
       local_id: userLocalId,
@@ -732,8 +765,8 @@ export default function PuntoVenta() {
         aplicarDescuento && totalCalculado.ajuste_porcentual > 0
           ? totalCalculado.ajuste_porcentual
           : 0,
-      aplicar_descuento: aplicarDescuento, // Flag para backend
-      origenes_descuento: origenes_descuento,
+      aplicar_descuento: aplicarDescuento,
+      origenes_descuento,
       cuotas: totalCalculado.cuotas,
       monto_por_cuota: totalCalculado?.monto_por_cuota ?? null,
       porcentaje_recargo_cuotas: totalCalculado?.porcentaje_recargo_cuotas ?? 0,
@@ -741,6 +774,43 @@ export default function PuntoVenta() {
       precio_base: totalCalculado.precio_base,
       recargo_monto_cuotas: totalCalculado?.recargo_monto_cuotas ?? 0
     };
+
+    // =========================================================
+    // SI ES COMPUESTO: ABRIR MODAL Y SALIR (NO POSTEA ACÁ)
+    // =========================================================
+    if (esCompuesto) {
+      try {
+        const comps = await cargarComponentesCompuesto(medioPago);
+
+        if (!Array.isArray(comps) || comps.length < 2) {
+          alert(
+            'Este medio compuesto no tiene al menos 2 componentes configurados.'
+          );
+          return;
+        }
+
+        setCompNombre(medioSel?.nombre || 'Medio compuesto');
+        setCompComponentes(comps);
+
+        // Guardamos la venta pendiente para confirmarla desde el modal
+        setVentaRequestPendiente(ventaRequest);
+
+        // Abrimos modal
+        setOpenPagoCompuesto(true);
+        return;
+      } catch (err) {
+        alert(
+          err?.response?.data?.mensajeError ||
+            'No se pudieron cargar los componentes del medio compuesto.'
+        );
+        return;
+      }
+    }
+
+    // =========================================================
+    // SI ES SIMPLE: FLUJO NORMAL (CONFIRM + POST)
+    // =========================================================
+    if (!window.confirm('¿Deseás registrar la venta?')) return;
 
     try {
       const response = await fetch('http://localhost:8080/ventas/pos', {
@@ -764,9 +834,9 @@ export default function PuntoVenta() {
 
       setCarrito([]);
       setBusqueda('');
-      // 👇 LIMPIÁ el input de descuento y el radio
       setDescuentoPersonalizado('');
       setAplicarDescuento(false);
+
       if (busqueda.trim() !== '') {
         fetch(
           `http://localhost:8080/buscar-productos-detallado?query=${encodeURIComponent(
@@ -779,6 +849,7 @@ export default function PuntoVenta() {
             setProductos(agrupados);
           });
       }
+
       const data = await response.json();
       const ventaId = data.venta_id;
 
@@ -938,6 +1009,64 @@ export default function PuntoVenta() {
     idleTimerRef.current = setTimeout(() => {
       finalizarEscaneo(); // usa bufferRef
     }, dynIdleFlushRef.current);
+  };
+
+  const confirmarPagoCompuesto = async ({ pagos_componentes }) => {
+    // pagos_componentes: [{ medio_pago_id, orden, monto }, ...]
+    // Validación típica: suma == ventaRequestPendiente.total (esto puede ir en el modal)
+
+    if (!ventaRequestPendiente) return;
+
+    if (!window.confirm('¿Deseás registrar la venta?')) return;
+
+    try {
+      const response = await fetch('http://localhost:8080/ventas/pos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...ventaRequestPendiente,
+          pagos_componentes
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        const msg = error.mensajeError || 'Error al registrar la venta';
+
+        if (msg.toLowerCase().includes('caja abierta')) {
+          setMensajeCaja(msg);
+          setMostrarModalCaja(true);
+        } else {
+          alert(msg);
+        }
+        return;
+      }
+
+      setOpenPagoCompuesto(false);
+      setVentaRequestPendiente(null);
+
+      // Reuso tu mismo “OK”
+      setCarrito([]);
+      setBusqueda('');
+      setDescuentoPersonalizado('');
+      setAplicarDescuento(false);
+
+      const data = await response.json();
+      const ventaId = data.venta_id;
+
+      const ventaCompleta = await fetch(
+        `http://localhost:8080/ventas/${ventaId}`
+      ).then((r) => r.json());
+      setVentaFinalizada(ventaCompleta);
+      alert('✅ Venta registrada correctamente');
+
+      setCarrito([]);
+      setClienteSeleccionado(null);
+      setBusquedaCliente('');
+    } catch (err) {
+      alert('Error de red al registrar la venta');
+      console.error('Error:', err);
+    }
   };
 
   return (
@@ -1685,6 +1814,15 @@ export default function PuntoVenta() {
         open={modalNuevoClienteOpen}
         onClose={() => setModalNuevoClienteOpen(false)}
       />
+      <ModalPagoCompuesto
+        open={openPagoCompuesto}
+        onClose={() => setOpenPagoCompuesto(false)}
+        total={ventaRequestPendiente?.total ?? 0}
+        compuestoNombre={compNombre}
+        componentes={compComponentes}
+        onConfirm={(payload) => confirmarPagoCompuesto(payload)}
+      />
+
       {mostrarModalCaja && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center px-4">
           <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md relative border-t-4 border-pink-500">
